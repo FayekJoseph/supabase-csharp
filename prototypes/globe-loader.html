@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Globe Loader</title>
+  <style>
+    :root {
+      /* Single monochrome ink color + off-white paper */
+      --paper: #f4f2ec;
+      --ink: #1d1d1b;
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+    }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--paper);
+    }
+
+    /* The loader is exactly 200x200 and centered on the page. */
+    .globe-loader {
+      position: relative;
+      width: 200px;
+      height: 200px;
+    }
+
+    .globe-loader svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    /* Whirl rings spinning around the globe. */
+    .whirl {
+      animation: whirl-spin linear infinite;
+      transform-origin: 100px 100px;
+    }
+    .whirl--outer { animation-duration: 6s; }
+    .whirl--inner { animation-duration: 4s; animation-direction: reverse; }
+
+    @keyframes whirl-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .whirl circle {
+      fill: none;
+      stroke: var(--ink);
+    }
+
+    /* Globe ink styling — monochrome, no text. */
+    .ocean      { fill: none; stroke: var(--ink); stroke-opacity: 0.55; }
+    .graticule  { fill: none; stroke: var(--ink); stroke-opacity: 0.18; stroke-width: 0.5; }
+    .land       { fill: var(--ink); fill-opacity: 0.82; stroke: none; }
+  </style>
+</head>
+<body>
+  <div class="globe-loader" role="status" aria-label="Loading">
+    <!-- Whirl: dashed rings orbiting the globe -->
+    <svg viewBox="0 0 200 200" aria-hidden="true">
+      <g class="whirl whirl--outer">
+        <circle cx="100" cy="100" r="92"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-dasharray="2 26"
+                stroke-opacity="0.5" />
+      </g>
+      <g class="whirl whirl--inner">
+        <circle cx="100" cy="100" r="83"
+                stroke-width="3"
+                stroke-linecap="round"
+                stroke-dasharray="40 220"
+                stroke-opacity="0.85" />
+      </g>
+    </svg>
+
+    <!-- Globe: orthographic projection with real country outlines -->
+    <svg id="globe" viewBox="0 0 200 200" aria-hidden="true"></svg>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+  <script>
+    const SIZE = 200;
+    const RADIUS = 72; // globe radius inside the 200x200 box, leaves room for whirl
+
+    const svg = d3.select("#globe");
+
+    const projection = d3.geoOrthographic()
+      .scale(RADIUS)
+      .translate([SIZE / 2, SIZE / 2])
+      .clipAngle(90);
+
+    const path = d3.geoPath(projection);
+    const graticule = d3.geoGraticule10();
+
+    // Ocean disc (globe outline)
+    svg.append("path")
+      .datum({ type: "Sphere" })
+      .attr("class", "ocean")
+      .attr("stroke-width", 1);
+
+    const gratPath = svg.append("path")
+      .datum(graticule)
+      .attr("class", "graticule");
+
+    let landPath = null;
+
+    function render() {
+      svg.select(".ocean").attr("d", path);
+      gratPath.attr("d", path);
+      if (landPath) landPath.attr("d", path);
+    }
+
+    // Spin the globe by rotating the projection over time.
+    const SPIN_DEG_PER_SEC = 12; // degrees of longitude per second
+    let last = null;
+    function tick(now) {
+      if (last == null) last = now;
+      const dt = (now - last) / 1000;
+      last = now;
+      const [lambda, phi] = projection.rotate();
+      projection.rotate([lambda + SPIN_DEG_PER_SEC * dt, phi]);
+      render();
+      requestAnimationFrame(tick);
+    }
+
+    // Load real country outlines (world-atlas) and start spinning.
+    fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
+      .then((r) => r.json())
+      .then((world) => {
+        const countries = topojson.feature(world, world.objects.countries);
+        landPath = svg.append("path")
+          .datum(countries)
+          .attr("class", "land");
+        projection.rotate([0, -15]); // slight tilt for a nicer view
+        requestAnimationFrame(tick);
+      })
+      .catch(() => {
+        // If the country data can't be fetched, still show the spinning sphere + graticule.
+        projection.rotate([0, -15]);
+        requestAnimationFrame(tick);
+      });
+  </script>
+</body>
+</html>
