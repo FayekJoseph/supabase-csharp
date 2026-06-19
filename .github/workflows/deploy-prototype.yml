@@ -1,0 +1,55 @@
+name: Deploy Globe Loader Prototype
+
+# Publishes the prototypes/ folder to GitHub Pages.
+#
+# NOTE: This uses the "GitHub Actions" Pages source (Settings > Pages >
+# Build and deployment > Source: GitHub Actions). A repo can only have one
+# Pages source, so enabling this REPLACES the gh-pages-branch deploy used by
+# build-documentation.yaml. Enable it intentionally.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/hopeful-galileo-wr4tt4
+    paths:
+      - prototypes/**
+      - .github/workflows/deploy-prototype.yml
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; cancel in-progress runs for the same ref.
+concurrency:
+  group: pages-prototype
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp prototypes/globe-loader.html _site/index.html
+          cp prototypes/globe-loader.html _site/globe-loader.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
